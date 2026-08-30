@@ -1,0 +1,82 @@
+google:
+  # User's sheet: https://docs.google.com/spreadsheets/d/1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64/
+  spreadsheet_id: "1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64"  # move to .env if repo is public
+  worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
+  calendar_id: ""                    # REQUIRED: dedicated "JOE Deadlines" secondary calendar
+                                     # ...@group.calendar.google.com -- "primary" is refused
+
+fetch:
+  include_previous_issue: true
+  cache_dir: "data/raw"
+
+scoring:
+  min_score_to_sheet: 3       # below this, drop entirely
+  min_score_to_calendar: 6    # at/above this, auto-create a deadline event
+  sections:                   # points by JOE section
+    "Full-Time Nonacademic": 5
+    "Other Nonacademic (Temporary, Part-Time, Non-Salaried, Consulting, Etc.)": 2
+    "US: Full-Time Academic (Permanent, Tenure Track or Tenured)": 3
+    "International: Full-Time Academic (Permanent, Tenure Track or Tenured)": 0
+    "US: Other Academic (Visiting or Temporary)": 1
+  target_employers:           # substring match on institution, case-insensitive
+    points: 6
+    names: ["Analysis Group", "Cornerstone Research", "Brattle", "Charles River Associates",
+            "CRA International", "Compass Lexecon", "NERA", "Edgeworth Economics",
+            "Bates White", "Keystone Strategy", "Berkeley Research Group",
+            "Resources for the Future", "Mathematica", "Abt", "RAND", "Urban Institute",
+            "NBER", "Federal Reserve", "Environmental Protection Agency", "World Bank"]
+  # The user's five target areas. A field fires if ANY of its JEL prefixes or keywords
+  # match; it scores `points`, +1 for each additional distinct signal, capped at points+3.
+  # The names of the fields that fired go in the sheet's `Fields` column so the sheet can
+  # be filtered by area.
+  fields:
+    environmental:
+      points: 5
+      jel: ["Q5", "Q4", "Q2", "Q3"]     # env econ, energy, renewables/water, nonrenewables
+      keywords: ["environmental economics", "energy economics", "climate", "water quality",
+                 "drinking water", "air quality", "pollution", "coal", "mining", "emissions",
+                 "electricity market", "utility regulation", "natural resource",
+                 "environmental justice", "EPA", "sustainability"]
+    health:
+      points: 4
+      jel: ["I1", "I3"]
+      keywords: ["health economics", "health policy", "healthcare", "public health",
+                 "medicaid", "medicare", "insurance", "pharmaceutical", "hospital",
+                 "epidemiolog", "mortality", "health outcomes"]
+    micro:
+      points: 4
+      jel: ["D1", "D6", "D8", "J2", "J3", "H2", "L1", "L4", "R2", "O1"]
+      keywords: ["applied microeconomics", "labor economics", "public economics",
+                 "industrial organization", "development economics", "urban economics",
+                 "causal inference", "quasi-experimental", "difference-in-differences",
+                 "instrumental variables", "regression discontinuity", "program evaluation",
+                 "policy evaluation", "welfare analysis"]
+    data_science:
+      points: 4
+      jel: ["C1", "C3", "C4", "C5", "C8", "C9"]
+      keywords: ["data scientist", "data science", "machine learning", "econometrician",
+                 "statistical modeling", "predictive model", "python", "R", "SQL",
+                 "experimentation", "a/b test", "causal machine learning", "big data",
+                 "quantitative researcher", "quantitative analyst"]
+    consulting:
+      points: 5
+      jel: ["K2", "K4", "L4", "L5"]
+      keywords: ["economic consulting", "litigation", "expert testimony", "antitrust",
+                 "competition policy", "damages", "class certification", "merger review",
+                 "regulatory analysis", "benefit-cost", "cost-benefit", "valuation",
+                 "client engagement", "case team"]
+  max_field_points: 16        # total cap across all fields
+  negative:                   # subtract points
+    - {points: -4, patterns: ["macroeconomics", "monetary policy", "asset pricing",
+                              "corporate finance", "marketing", "accounting",
+                              "economic history", "history of thought"]}
+    - {points: -3, patterns: ["postdoc", "post-doctoral", "adjunct", "lecturer"]}
+  locations:
+    preferred: {points: 2, patterns: ["New York", "Boston", "Washington", "Massachusetts",
+                                      "District of Columbia", "Chicago", "Illinois", "Remote"]}
+    penalize:  {points: -2, patterns: []}   # non-US handled via section weights
+
+calendar:
+  reminder_days: [14, 3]      # popup reminders before the all-day deadline event
+  event_prefix: "[JOE]"
+  create_for_marked_rows: true  # honor the sheet's Track column (see section 6)
