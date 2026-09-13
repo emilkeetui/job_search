@@ -165,7 +165,7 @@ Setup, to be documented step by step in README.md:
 
 1. Google Cloud console → new project → enable the **Google Sheets API** and **Google Calendar API**.
 2. Create a service account; create a JSON key; save it to `credentials/service_account.json` (gitignored). Note its address, `something@project.iam.gserviceaccount.com`.
-3. In the target Sheet (`1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64`), Share → add that address as **Editor**.
+3. In the target Sheet (ID from `.env`'s `JOEPIPE_SPREADSHEET_ID`), Share → add that address as **Editor**.
 4. In Google Calendar, create a **new secondary calendar named "JOE Deadlines"** — do not use `primary`. Settings for that calendar → "Share with specific people" → add the service account address with **"Make changes to events"**. Copy the calendar ID (looks like `...@group.calendar.google.com`) into `config.yaml`.
 
 Auth code is then just:
@@ -206,8 +206,8 @@ Every knob lives here; **no magic constants in the scoring code**. Ship it prefi
 
 ```yaml
 google:
-  # User's sheet: https://docs.google.com/spreadsheets/d/1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64/
-  spreadsheet_id: "1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64"  # move to .env if repo is public
+  # spreadsheet_id / calendar_id are NOT committed -- see .env / JOEPIPE_SPREADSHEET_ID
+  spreadsheet_id: ""
   worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
   calendar_id: ""                    # REQUIRED: dedicated "JOE Deadlines" secondary calendar
                                      # ...@group.calendar.google.com — "primary" is refused

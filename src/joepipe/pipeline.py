@@ -56,6 +56,14 @@ def run_pipeline(cfg: Config, dry_run: bool, apply_: bool, i_know_what_im_doing:
     if dry_run:
         return result
 
+    if not cfg.google.spreadsheet_id.strip():
+        result.exit_code = 2
+        result.messages.append(
+            "spreadsheet_id is not set. Copy .env.example to .env and fill in "
+            "JOEPIPE_SPREADSHEET_ID (see README.md)."
+        )
+        return result
+
     try:
         creds = load_credentials()
         gc = sheets.get_client(creds)
@@ -164,17 +172,26 @@ def run_doctor(cfg: Config) -> list[DoctorCheck]:
         checks.append(DoctorCheck("service account key found", False, str(exc)))
         return checks
 
-    try:
-        gc = sheets.get_client(creds)
-        spreadsheet = sheets.open_spreadsheet(gc, cfg.google.spreadsheet_id)
-        checks.append(DoctorCheck("spreadsheet access", True, spreadsheet.url))
-    except Exception as exc:  # noqa: BLE001
+    if not cfg.google.spreadsheet_id.strip():
         checks.append(
             DoctorCheck(
                 "spreadsheet access", False,
-                f"{exc}. Share the sheet with {service_account_email(creds)} as Editor.",
+                "spreadsheet_id is empty. Copy .env.example to .env and fill in "
+                "JOEPIPE_SPREADSHEET_ID.",
             )
         )
+    else:
+        try:
+            gc = sheets.get_client(creds)
+            spreadsheet = sheets.open_spreadsheet(gc, cfg.google.spreadsheet_id)
+            checks.append(DoctorCheck("spreadsheet access", True, spreadsheet.url))
+        except Exception as exc:  # noqa: BLE001
+            checks.append(
+                DoctorCheck(
+                    "spreadsheet access", False,
+                    f"{exc}. Share the sheet with {service_account_email(creds)} as Editor.",
+                )
+            )
 
     if cfg.google.calendar_id.strip():
         try:

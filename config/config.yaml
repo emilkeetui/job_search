@@ -1,8 +1,10 @@
 google:
-  # User's sheet: https://docs.google.com/spreadsheets/d/1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64/
-  spreadsheet_id: "1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64"  # move to .env if repo is public
+  # spreadsheet_id and calendar_id live in .env, not here -- this repo is public.
+  # Copy .env.example to .env and fill in JOEPIPE_SPREADSHEET_ID / JOEPIPE_CALENDAR_ID.
+  spreadsheet_id: ""                 # REQUIRED via .env -- see JOEPIPE_SPREADSHEET_ID
   worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
-  calendar_id: ""                    # REQUIRED: dedicated "JOE Deadlines" secondary calendar
+  calendar_id: ""                    # REQUIRED via .env -- see JOEPIPE_CALENDAR_ID
+                                     # dedicated "JOE Deadlines" secondary calendar,
                                      # ...@group.calendar.google.com -- "primary" is refused
 
 fetch:

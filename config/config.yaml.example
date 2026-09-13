@@ -1,0 +1,68 @@
+# Starting point for your own job search. Copy this file to config.yaml and edit
+# the scoring section below for your own field, target employers, and priorities.
+# spreadsheet_id and calendar_id do NOT go here -- see .env.example.
+#
+# As shipped, this file scores nothing negatively and filters nothing out
+# (min_score_to_sheet: 0), so your first run shows you the full unfiltered JOE
+# feed. Add target_employers / fields / negative patterns below to make it
+# actually rank things for you -- see README.md "Customizing for your own search".
+
+google:
+  worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
+  # spreadsheet_id and calendar_id are read from .env (JOEPIPE_SPREADSHEET_ID /
+  # JOEPIPE_CALENDAR_ID) -- leave these blank here.
+  spreadsheet_id: ""
+  calendar_id: ""
+
+fetch:
+  include_previous_issue: true
+  cache_dir: "data/raw"
+
+scoring:
+  min_score_to_sheet: 0       # below this, drop entirely -- 0 keeps everything for now
+  min_score_to_calendar: 5    # at/above this, auto-create a deadline event
+  sections:                   # points by JOE section -- tune to how you weight academic
+                               # vs. industry vs. government postings
+    "Full-Time Nonacademic": 2
+    "Other Nonacademic (Temporary, Part-Time, Non-Salaried, Consulting, Etc.)": 1
+    "US: Full-Time Academic (Permanent, Tenure Track or Tenured)": 2
+    "International: Full-Time Academic (Permanent, Tenure Track or Tenured)": 1
+    "US: Other Academic (Visiting or Temporary)": 1
+
+  # Employers you'd move to the top of the list. Substring match on institution
+  # name, case-insensitive. Empty by default -- add your own.
+  target_employers:
+    points: 6
+    names: []
+    # names: ["Federal Reserve", "World Bank", "RAND", "Analysis Group"]
+
+  # Your target areas. A field fires if ANY of its JEL prefixes or keywords match
+  # (against title + department + keywords + full text); it scores `points`, +1 per
+  # additional distinct signal, capped at points+3. Field names that fired show up
+  # in the sheet's `Fields` column so you can filter by area. Empty by default --
+  # add one block per area you care about. Example (uncomment and edit):
+  #
+  # fields:
+  #   my_field:
+  #     points: 5
+  #     jel: ["Q5", "Q4"]                 # JEL code prefixes, matched via startswith
+  #     keywords: ["environmental economics", "climate", "water quality"]
+  fields: {}
+  max_field_points: 16        # total cap across all fields
+
+  # Patterns to actively penalize -- e.g. subfields you're not interested in, or
+  # appointment types you want to avoid. Empty by default.
+  negative: []
+  # negative:
+  #   - {points: -4, patterns: ["macroeconomics", "monetary policy"]}
+  #   - {points: -3, patterns: ["postdoc", "adjunct"]}
+
+  locations:
+    preferred: {points: 0, patterns: []}
+    # preferred: {points: 2, patterns: ["New York", "Boston", "Remote"]}
+    penalize: {points: 0, patterns: []}
+
+calendar:
+  reminder_days: [14, 3]      # popup reminders before the all-day deadline event
+  event_prefix: "[JOE]"
+  create_for_marked_rows: true  # honor the sheet's Track column (see README.md)

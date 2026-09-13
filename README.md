@@ -1,9 +1,13 @@
 # job_search — JOE pipeline
 
-One command scrapes AEA JOE listings, scores them for relevance against a Cornell
-applied-economics-PhD-on-the-consulting-market profile, upserts them into a Google
-Sheet, and creates deadline events in a dedicated Google Calendar. Idempotent, safe
-to re-run, no interactive prompts at runtime.
+One command scrapes AEA JOE listings, scores them for relevance against *your*
+job-market profile (fully configurable — see "Customizing for your own search"
+below), upserts them into a Google Sheet, and creates deadline events in a dedicated
+Google Calendar. Idempotent, safe to re-run, no interactive prompts at runtime.
+
+Originally built for a Cornell applied-economics-PhD-on-the-consulting-market job
+search; the scoring is config-driven, not hardcoded, so it works for any field or
+target sector once you fill in `config/config.yaml`.
 
 See [PLAN.md](PLAN.md) for the full design rationale.
 
@@ -35,29 +39,61 @@ this is deliberate.
    downloaded file as `credentials/service_account.json` (the `credentials/` folder is
    gitignored — never commit this file). Note the service account's email address,
    something like `joepipe@your-project.iam.gserviceaccount.com`.
-4. Open the target Google Sheet
-   (`https://docs.google.com/spreadsheets/d/1wndPLiybxVJSEoT_xpgVid2Jy48EOZPB8e33T-DOB64/`)
-   → **Share** → add the service account's email as **Editor**.
+4. Create (or reuse) a Google Sheet to hold your listings, and note its ID from the
+   URL (`https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/`). Open it →
+   **Share** → add the service account's email as **Editor**.
 5. In Google Calendar, create a **new secondary calendar** (Settings → "Add calendar" →
    "Create new calendar"), name it something like **"JOE Deadlines"**. Do **not** use
    your primary calendar — the pipeline refuses to write to `primary` on purpose.
 6. Open that calendar's settings → **Share with specific people** → add the service
    account's email with **"Make changes to events"** permission.
 7. Copy the calendar's ID (Settings → "Integrate calendar" → Calendar ID, looks like
-   `xxxxxxxx@group.calendar.google.com`) into `config/config.yaml` under
-   `google.calendar_id`.
+   `xxxxxxxx@group.calendar.google.com`) — you'll need it in the next step.
 
 ### 3. Config
 
-Edit `config/config.yaml`:
-- `google.calendar_id` — required, from step 6 above.
-- Everything else (spreadsheet ID, scoring weights, target employers, keywords) is
-  already filled in for the user's profile. Tune freely — no code changes needed for
-  scoring adjustments.
+This repo is public, so the spreadsheet and calendar IDs are **not** committed —
+they live in `.env`, gitignored:
 
-If this repo is or becomes public, move `spreadsheet_id` / `calendar_id` out of
-`config.yaml` and into `.env` instead (copy `.env.example` to `.env`); values there
-override `config.yaml` at load time.
+```bash
+cp .env.example .env
+# then edit .env and fill in:
+#   JOEPIPE_SPREADSHEET_ID=<from step 4 above>
+#   JOEPIPE_CALENDAR_ID=<from step 7 above>
+```
+
+If `config/config.yaml` doesn't exist yet (first-time setup), start from the
+template:
+
+```bash
+cp config/config.yaml.example config/config.yaml
+```
+
+`config.yaml.example` ships with an unfiltered default (every listing passes,
+scored only by section) so the pipeline is immediately runnable. It has no opinion
+about your field — see "Customizing for your own search" below to make it actually
+rank things for you.
+
+### Customizing for your own search
+
+Everything that determines *what counts as a good listing* lives in
+`scoring:` in `config/config.yaml` — no code changes needed:
+
+- `target_employers.names` — employers you want ranked to the top (substring match,
+  case-insensitive).
+- `fields` — your target areas. Each one fires on JEL code prefixes and/or keyword
+  matches against the title, department, keywords, and full text; matched fields show
+  up in the sheet's `Fields` column so you can filter by area. `score.py`'s
+  docstring and `config/config.yaml.example`'s comments show the exact syntax.
+  Existing example values in a filled-in `config.yaml` (from the original consulting
+  job-market profile this was built for) are a reference, not a requirement — replace
+  them with your own.
+- `negative` — patterns to actively penalize (subfields you want deprioritized,
+  appointment types you want to avoid).
+- `sections` — how much weight academic vs. nonacademic vs. government postings get.
+
+Run `joepipe preview` after each change — it fetches, scores, and prints a table with
+zero Google calls, so you can iterate on scoring without touching the sheet.
 
 ### 4. Verify
 
