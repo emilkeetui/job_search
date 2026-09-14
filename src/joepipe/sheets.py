@@ -1,9 +1,15 @@
 """Google Sheets upsert (PLAN.md section 6).
 
+This writes into the user's existing hand-maintained job tracker tab, so the
+column layout below mirrors what's already there rather than a schema the
+pipeline invented. Only two columns (Title, joe_id) are new -- appended at the
+end so nothing existing shifts.
+
 Hard rules enforced here:
   - Never clear() the sheet, never delete rows.
-  - Columns O/P/Q (Track, Status, Notes) are user-owned and must never be
-    overwritten by the pipeline once a row exists.
+  - User-owned columns (Apply by, Applied, Status, the two letter-tracking
+    columns, Letters Submitted, Industry, Notes) are never overwritten once a
+    row exists -- they're set blank on first insert and left alone after that.
   - Only ever touch the configured worksheet, never other tabs/spreadsheets.
   - Batch writes; never write cell by cell.
 """
@@ -19,16 +25,24 @@ from google.oauth2.service_account import Credentials
 from joepipe.models import ScoredListing
 
 HEADER = [
-    "joe_id", "First Seen", "Score", "Fields", "Why", "Section", "Institution",
-    "Title", "Location", "Deadline", "Days Left", "JEL", "Link", "Contact/URL",
-    "Track", "Status", "Notes",
+    "Deadline", "Apply by", "Applied", "Status", "Website", "Organization Name",
+    "Letter Writer Type of Upload", "Type of letter required", "Letters Submitted",
+    "Location", "Field", "Industry", "Notes", "Title", "joe_id",
 ]
-# Column indices (0-based) for clarity when building Sheets API requests.
-COL_JOE_ID, COL_FIRST_SEEN, COL_SCORE, COL_FIELDS, COL_WHY, COL_SECTION = range(6)
-COL_INSTITUTION, COL_TITLE, COL_LOCATION, COL_DEADLINE, COL_DAYS_LEFT = 6, 7, 8, 9, 10
-COL_JEL, COL_LINK, COL_CONTACT, COL_TRACK, COL_STATUS, COL_NOTES = 11, 12, 13, 14, 15, 16
+# Column indices (0-based).
+(
+    COL_DEADLINE, COL_APPLY_BY, COL_APPLIED, COL_STATUS, COL_WEBSITE, COL_ORG,
+    COL_LETTER_UPLOAD, COL_LETTER_TYPE, COL_LETTERS_SUBMITTED,
+    COL_LOCATION, COL_FIELD, COL_INDUSTRY, COL_NOTES, COL_TITLE, COL_JOE_ID,
+) = range(15)
 
-STATUS_OPTIONS = ["Interested", "Applying", "Applied", "Interview", "Rejected", "Offer"]
+# Filled/refreshed by the pipeline on every run.
+PIPELINE_OWNED = [COL_DEADLINE, COL_WEBSITE, COL_ORG, COL_LOCATION, COL_FIELD, COL_TITLE]
+# Set blank on first insert, then only ever edited by the user by hand.
+USER_OWNED = [
+    COL_APPLY_BY, COL_APPLIED, COL_STATUS, COL_LETTER_UPLOAD, COL_LETTER_TYPE,
+    COL_LETTERS_SUBMITTED, COL_INDUSTRY, COL_NOTES,
+]
 
 
 def _col_letter(idx0: int) -> str:
@@ -60,111 +74,79 @@ def open_spreadsheet(gc: gspread.Client, spreadsheet_id: str) -> gspread.Spreads
 def get_or_create_worksheet(spreadsheet: gspread.Spreadsheet, worksheet_name: str) -> tuple[gspread.Worksheet, bool]:
     try:
         ws = spreadsheet.worksheet(worksheet_name)
+        _ensure_header_extended(ws)
         return ws, False
     except gspread.exceptions.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=len(HEADER))
         _with_backoff(ws.update, "A1", [HEADER])
         _with_backoff(ws.freeze, rows=1)
-        _apply_validations(spreadsheet, ws)
         return ws, True
 
 
-def _apply_validations(spreadsheet: gspread.Spreadsheet, ws: gspread.Worksheet) -> None:
-    sheet_id = ws.id
-    requests = [
-        {
-            "setDataValidation": {
-                "range": {
-                    "sheetId": sheet_id, "startRowIndex": 1,
-                    "startColumnIndex": COL_TRACK, "endColumnIndex": COL_TRACK + 1,
-                },
-                "rule": {"condition": {"type": "BOOLEAN"}, "strict": True},
-            }
-        },
-        {
-            "setDataValidation": {
-                "range": {
-                    "sheetId": sheet_id, "startRowIndex": 1,
-                    "startColumnIndex": COL_STATUS, "endColumnIndex": COL_STATUS + 1,
-                },
-                "rule": {
-                    "condition": {
-                        "type": "ONE_OF_LIST",
-                        "values": [{"userEnteredValue": v} for v in STATUS_OPTIONS],
-                    },
-                    "strict": False,
-                    "showCustomUi": True,
-                },
-            }
-        },
-        {
-            "addConditionalFormatRule": {
-                "rule": {
-                    "ranges": [{
-                        "sheetId": sheet_id, "startRowIndex": 1,
-                        "startColumnIndex": COL_DAYS_LEFT, "endColumnIndex": COL_DAYS_LEFT + 1,
-                    }],
-                    "booleanRule": {
-                        "condition": {"type": "NUMBER_LESS_THAN_EQ", "values": [{"userEnteredValue": "7"}]},
-                        "format": {"backgroundColor": {"red": 0.96, "green": 0.80, "blue": 0.80}},
-                    },
-                },
-                "index": 0,
-            }
-        },
+def _ensure_header_extended(ws: gspread.Worksheet) -> None:
+    """Add the Title/joe_id header cells if this pre-existing tab doesn't have them yet.
+    Never touches any other header cell -- the rest of the tab's layout is the user's."""
+    row1 = _with_backoff(ws.row_values, 1)
+    missing = [
+        (idx, name) for idx, name in enumerate(HEADER)
+        if idx >= len(row1) or not row1[idx]
     ]
-    _with_backoff(spreadsheet.batch_update, {"requests": requests})
+    if not missing:
+        return
+    updates = [{"range": f"{_col_letter(idx)}1", "values": [[name]]} for idx, name in missing]
+    _with_backoff(ws.batch_update, updates, value_input_option="USER_ENTERED")
 
 
-def compute_days_left(deadline: str | None, today: date) -> str | int:
-    if not deadline:
-        return "—"  # em dash
-    try:
-        d = date.fromisoformat(deadline)
-    except ValueError:
-        return "—"
-    return (d - today).days
+def compute_website(listing) -> str:
+    if listing.urls:
+        return listing.urls[0]
+    return listing.listing_url
 
 
-def build_row(scored: ScoredListing, today: date, first_seen: str) -> list:
-    """Columns A..N, in order. Caller supplies first_seen (owned, never recomputed)."""
+def build_row(scored: ScoredListing) -> list:
+    """Full row for a brand-new listing, columns A..O. User-owned columns are
+    left blank except Notes, which gets a one-line score summary for context
+    on insert only -- it is never touched again after that."""
     listing = scored.listing
-    deadline_str = listing.deadline or "—"
-    days_left = compute_days_left(listing.deadline, today)
     location = "; ".join(loc.formatted() for loc in listing.locations if loc.formatted())
-    jel = ";".join(jc.code for jc in listing.jel_classes)
-    link = f'=HYPERLINK("{listing.listing_url}","{listing.joe_id}")'
-    contact = listing.urls[0] if listing.urls else (listing.emails[0] if listing.emails else "")
-    return [
-        listing.joe_id,
-        first_seen,
-        scored.score.total,
-        ";".join(scored.score.fields),
-        " | ".join(scored.score.reasons),
-        listing.section,
-        listing.institution,
-        listing.title,
-        location,
-        deadline_str,
-        days_left,
-        jel,
-        link,
-        contact,
-    ]
+    notes = f"[joepipe] score {scored.score.total} | {' | '.join(scored.score.reasons)}"
+    row = [""] * len(HEADER)
+    row[COL_DEADLINE] = listing.deadline or ""
+    row[COL_WEBSITE] = compute_website(listing)
+    row[COL_ORG] = listing.institution
+    row[COL_LOCATION] = location
+    row[COL_FIELD] = ",".join(scored.score.fields)
+    row[COL_TITLE] = listing.title
+    row[COL_NOTES] = notes
+    row[COL_JOE_ID] = listing.joe_id
+    return row
+
+
+def build_pipeline_owned_values(scored: ScoredListing) -> dict[int, str]:
+    """col_idx -> value, for refreshing an existing row without touching user-owned cells."""
+    listing = scored.listing
+    location = "; ".join(loc.formatted() for loc in listing.locations if loc.formatted())
+    return {
+        COL_DEADLINE: listing.deadline or "",
+        COL_WEBSITE: compute_website(listing),
+        COL_ORG: listing.institution,
+        COL_LOCATION: location,
+        COL_FIELD: ",".join(scored.score.fields),
+        COL_TITLE: listing.title,
+    }
 
 
 def read_sheet_state(ws: gspread.Worksheet) -> dict[str, dict]:
-    """joe_id -> {row, first_seen, track, status, notes}."""
+    """joe_id -> {row, status, notes}. Rows without a joe_id (the user's pre-existing
+    manual entries) are skipped -- they have nothing for the pipeline to key on."""
     values = _with_backoff(ws.get_all_values)
     state: dict[str, dict] = {}
     for i, row in enumerate(values[1:], start=2):
-        if not row or not row[0]:
+        if len(row) <= COL_JOE_ID or not row[COL_JOE_ID]:
             continue
         row = row + [""] * (len(HEADER) - len(row))
         state[row[COL_JOE_ID]] = {
             "row": i,
-            "first_seen": row[COL_FIRST_SEEN],
-            "track": row[COL_TRACK].strip().upper() in ("TRUE", "1", "YES"),
             "status": row[COL_STATUS].strip(),
             "notes": row[COL_NOTES],
         }
@@ -180,7 +162,6 @@ def upsert_listings(
     """Upsert scored listings. Returns (worksheet, new_count, updated_count, joe_ids_written, new_joe_ids)."""
     ws, _created = get_or_create_worksheet(spreadsheet, worksheet_name)
     existing = read_sheet_state(ws)
-    fetched_ids = {sl.listing.joe_id for sl in scored_listings}
 
     append_rows: list[list] = []
     update_data: list[dict] = []
@@ -194,17 +175,11 @@ def upsert_listings(
         written_ids.append(joe_id)
         if joe_id in existing:
             row_num = existing[joe_id]["row"]
-            row_values = build_row(sl, today, first_seen=existing[joe_id]["first_seen"])
-            # Only A and C..N -- never touch B (First Seen, set once) or O/P/Q (user-owned).
-            update_data.append({"range": f"A{row_num}", "values": [[row_values[0]]]})
-            update_data.append({
-                "range": f"{_col_letter(COL_SCORE)}{row_num}:{_col_letter(COL_CONTACT)}{row_num}",
-                "values": [row_values[2:]],
-            })
+            for col_idx, value in build_pipeline_owned_values(sl).items():
+                update_data.append({"range": f"{_col_letter(col_idx)}{row_num}", "values": [[value]]})
             updated_count += 1
         else:
-            row_values = build_row(sl, today, first_seen=today.isoformat())
-            append_rows.append(row_values + ["", "", ""])  # Track/Status/Notes blank
+            append_rows.append(build_row(sl))
             new_count += 1
             new_ids.append(joe_id)
 
@@ -213,15 +188,5 @@ def upsert_listings(
 
     if update_data:
         _with_backoff(ws.batch_update, update_data, value_input_option="USER_ENTERED")
-
-    # Listings that vanished from the feed (issue rolled over): never delete,
-    # just mark Days Left as expired.
-    expired_updates = [
-        {"range": f"{_col_letter(COL_DAYS_LEFT)}{info['row']}", "values": [["expired"]]}
-        for joe_id, info in existing.items()
-        if joe_id not in fetched_ids
-    ]
-    if expired_updates:
-        _with_backoff(ws.batch_update, expired_updates, value_input_option="USER_ENTERED")
 
     return ws, new_count, updated_count, written_ids, new_ids

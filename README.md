@@ -124,20 +124,25 @@ write and exits without writing — pass `--apply` to confirm. After that first 
 plain `joepipe run` writes normally.
 
 Running `joepipe run` twice in a row should always print `New 0 · Events created 0`
-and never touch a cell you've edited by hand (the `Track`, `Status`, and `Notes`
-columns are yours — the pipeline never overwrites them).
+and never touch a cell you've edited by hand.
 
 ## The Sheet
 
-One worksheet (`JOE Listings` by default). Columns A–N are pipeline-owned and get
-rewritten every run; columns **Track** (checkbox), **Status** (dropdown), and
-**Notes** (free text) are yours and are never touched by the pipeline once a row
-exists. Checking **Track** forces a calendar event to be created for that row even if
-its score is below the auto-create threshold. Setting **Status** to `Rejected` (or
-unchecking **Track** on a low-score row) deletes its calendar event on the next run.
+The pipeline writes into whatever tab `worksheet_name` points at — either an
+existing tab, following its current columns as-is, or a fresh one it creates with
+its own header if the tab doesn't exist yet. It never touches any other tab.
+
+Two columns are always pipeline-managed: **Title** and **joe_id** (the dedup
+key — added at the end of an existing tab's columns if not already present, so
+nothing shifts). Beyond those, `Deadline`, `Website`, `Organization Name`,
+`Location`, and `Field` are pipeline-owned and refresh every run if present in
+the sheet; everything else (e.g. `Apply by`, `Applied`, `Status`, `Notes`,
+`Industry`) is yours and is only ever set blank on a row's first insert, then
+left alone. Setting **Status** to `Rejected` deletes that row's calendar event
+on the next run.
 
 Rows are never deleted, even for listings that have rolled out of JOE's current
-export — their `Days Left` column just switches to `expired`.
+export.
 
 ## Revoking access
 

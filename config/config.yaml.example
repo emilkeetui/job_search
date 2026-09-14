@@ -8,7 +8,9 @@
 # actually rank things for you -- see README.md "Customizing for your own search".
 
 google:
-  worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
+  # Name of an existing tab to fill in following its current columns, or a new
+  # tab name -- the pipeline creates it with its standard header if missing.
+  worksheet_name: "JOE Listings"
   # spreadsheet_id and calendar_id are read from .env (JOEPIPE_SPREADSHEET_ID /
   # JOEPIPE_CALENDAR_ID) -- leave these blank here.
   spreadsheet_id: ""
@@ -65,4 +67,3 @@ scoring:
 calendar:
   reminder_days: [14, 3]      # popup reminders before the all-day deadline event
   event_prefix: "[JOE]"
-  create_for_marked_rows: true  # honor the sheet's Track column (see README.md)

@@ -2,7 +2,7 @@ google:
   # spreadsheet_id and calendar_id live in .env, not here -- this repo is public.
   # Copy .env.example to .env and fill in JOEPIPE_SPREADSHEET_ID / JOEPIPE_CALENDAR_ID.
   spreadsheet_id: ""                 # REQUIRED via .env -- see JOEPIPE_SPREADSHEET_ID
-  worksheet_name: "JOE Listings"     # pipeline owns this tab only; never touches others
+  worksheet_name: "Sheet1"           # the user's existing hand-maintained job tracker tab
   calendar_id: ""                    # REQUIRED via .env -- see JOEPIPE_CALENDAR_ID
                                      # dedicated "JOE Deadlines" secondary calendar,
                                      # ...@group.calendar.google.com -- "primary" is refused
@@ -12,14 +12,15 @@ fetch:
   cache_dir: "data/raw"
 
 scoring:
-  min_score_to_sheet: 3       # below this, drop entirely
-  min_score_to_calendar: 6    # at/above this, auto-create a deadline event
+  min_score_to_sheet: 18      # below this, drop entirely
+  min_score_to_calendar: 20   # at/above this, auto-create a deadline event
   sections:                   # points by JOE section
     "Full-Time Nonacademic": 5
     "Other Nonacademic (Temporary, Part-Time, Non-Salaried, Consulting, Etc.)": 2
     "US: Full-Time Academic (Permanent, Tenure Track or Tenured)": 3
     "International: Full-Time Academic (Permanent, Tenure Track or Tenured)": 0
-    "US: Other Academic (Visiting or Temporary)": 1
+    "US: Other Academic (Visiting or Temporary)": 2
+    "US: Other Academic (Part-time or Adjunct)": 2
   target_employers:           # substring match on institution, case-insensitive
     points: 6
     names: ["Analysis Group", "Cornerstone Research", "Brattle", "Charles River Associates",
@@ -34,11 +35,12 @@ scoring:
   fields:
     environmental:
       points: 5
-      jel: ["Q5", "Q4", "Q2", "Q3"]     # env econ, energy, renewables/water, nonrenewables
+      jel: ["Q5", "Q4", "Q2", "Q3"]     # env econ, energy, renewables/water, nonrenewables, minerals/mining
       keywords: ["environmental economics", "energy economics", "climate", "water quality",
                  "drinking water", "air quality", "pollution", "coal", "mining", "emissions",
                  "electricity market", "utility regulation", "natural resource",
-                 "environmental justice", "EPA", "sustainability"]
+                 "environmental justice", "EPA", "sustainability", "critical minerals",
+                 "rare earth", "mineral", "extractive industries", "natural resource management"]
     health:
       points: 4
       jel: ["I1", "I3"]
@@ -67,12 +69,24 @@ scoring:
                  "competition policy", "damages", "class certification", "merger review",
                  "regulatory analysis", "benefit-cost", "cost-benefit", "valuation",
                  "client engagement", "case team"]
-  max_field_points: 16        # total cap across all fields
+    political_economy:
+      points: 4
+      jel: ["P16", "D72", "P48"]
+      keywords: ["political economy", "political economics", "public choice",
+                 "institutions and development", "comparative political economy",
+                 "political institutions"]
+    teaching:
+      points: 3
+      jel: []
+      keywords: ["teaching-track", "teaching professor", "senior lecturer",
+                 "principal lecturer", "lecturer", "adjunct professor",
+                 "teaching load", "course development", "teaching-focused",
+                 "instructor of economics"]
+  max_field_points: 20        # total cap across all fields
   negative:                   # subtract points
     - {points: -4, patterns: ["macroeconomics", "monetary policy", "asset pricing",
                               "corporate finance", "marketing", "accounting",
                               "economic history", "history of thought"]}
-    - {points: -3, patterns: ["postdoc", "post-doctoral", "adjunct", "lecturer"]}
   locations:
     preferred: {points: 2, patterns: ["New York", "Boston", "Washington", "Massachusetts",
                                       "District of Columbia", "Chicago", "Illinois", "Remote"]}
@@ -81,4 +95,3 @@ scoring:
 calendar:
   reminder_days: [14, 3]      # popup reminders before the all-day deadline event
   event_prefix: "[JOE]"
-  create_for_marked_rows: true  # honor the sheet's Track column (see section 6)
