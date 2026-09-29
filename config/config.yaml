@@ -21,13 +21,73 @@ scoring:
     "International: Full-Time Academic (Permanent, Tenure Track or Tenured)": 0
     "US: Other Academic (Visiting or Temporary)": 2
     "US: Other Academic (Part-time or Adjunct)": 2
+  # Temporary/visiting doesn't matter if the appointment is full-time for >= min_months
+  # (e.g. "24-month appointment", "two-year postdoc"): score it like the permanent
+  # equivalent. Anything stating "part-time" keeps its section weight above.
+  long_term_temporary:
+    min_months: 12
+    sections:
+      "US: Other Academic (Visiting or Temporary)": 3                                    # = US full-time academic
+      "Other Nonacademic (Temporary, Part-Time, Non-Salaried, Consulting, Etc.)": 5      # = full-time nonacademic
+  # Used ONLY when a listing has no JEL codes (JOE's "00 - Default: Any Field"): each code
+  # whose phrases appear in the description is treated as if the poster had tagged it,
+  # and fires fields below through their `jel` lists (shown as "jel~Q3" in reasons).
+  # Only codes some field actually uses are worth listing here.
+  jel_inference:
+    # Avoid generic words that show up in boilerplate ("employment" in EEO statements,
+    # "programming" as in seminar programming, "resource economics" in degree lists).
+    Q2: ["renewable resource", "water resource", "fisheries", "forestry", "land use",
+         "conservation"]
+    Q3: ["critical mineral", "mineral", "mining", "nonrenewable", "extractive", "oil and gas"]
+    Q4: ["energy policy", "energy economics", "energy market", "electricity", "renewable energy",
+         "energy transition", "decarboniz"]
+    Q5: ["environmental economics", "environmental policy", "climate", "pollution", "emissions",
+         "air quality", "water quality"]
+    I1: ["health economics", "health policy", "healthcare", "health care", "public health",
+         "health insurance"]
+    I3: ["poverty", "inequality", "social welfare"]
+    D6: ["welfare economics", "distributional"]
+    D8: ["information economics", "behavioral economics", "mechanism design"]
+    J2: ["labor economics", "labor market", "labor supply"]
+    H2: ["public finance", "taxation", "tax policy"]
+    L1: ["industrial organization", "market structure"]
+    L4: ["antitrust", "competition policy", "merger"]
+    L5: ["industrial policy", "regulatory economics"]
+    R2: ["urban economics", "housing"]
+    O1: ["development economics", "developing countries", "economic development"]
+    C1: ["econometrics", "causal inference"]
+    C5: ["econometric model", "structural estimation", "forecasting"]
+    C8: ["data management", "data engineering", "python", "stata"]
+    D72: ["political economy", "elections", "voting", "legislat"]
   target_employers:           # substring match on institution, case-insensitive
     points: 6
     names: ["Analysis Group", "Cornerstone Research", "Brattle", "Charles River Associates",
             "CRA International", "Compass Lexecon", "NERA", "Edgeworth Economics",
             "Bates White", "Keystone Strategy", "Berkeley Research Group",
             "Resources for the Future", "Mathematica", "Abt", "RAND", "Urban Institute",
-            "NBER", "Federal Reserve", "Environmental Protection Agency", "World Bank"]
+            "NBER", "World Bank"]
+  # Hard exclusion: any listing whose institution matches one of these is never written
+  # to the sheet or calendar, regardless of score (and any existing joepipe calendar
+  # event for it is deleted). No federal government jobs, incl. the Fed and the CEA.
+  exclude_employers: ["Federal Reserve", "Council of Economic Advisers",
+                      "Council of Economic Advisors", "White House",
+                      "Office of Management and Budget", "Congressional Budget Office",
+                      "Government Accountability Office", "Joint Committee on Taxation",
+                      "Medicare Payment Advisory Commission", "MedPAC",
+                      "Office of Evaluation Sciences", "U.S. Department of",
+                      "US Department of", "United States Department of",
+                      "Department of the Treasury", "U.S. Treasury", "Census Bureau",
+                      "Bureau of Labor Statistics", "Bureau of Economic Analysis",
+                      "Economic Research Service", "Energy Information Administration",
+                      "Federal Communications Commission", "Federal Trade Commission",
+                      "Federal Energy Regulatory Commission", "Federal Deposit Insurance",
+                      "FDIC", "Federal Housing Finance Agency", "U.S. Securities",
+                      "Securities and Exchange Commission", "Commodity Futures Trading",
+                      "Consumer Financial Protection Bureau", "Comptroller of the Currency",
+                      "Equal Employment Opportunity Commission",
+                      "Environmental Protection Agency", "International Trade Commission",
+                      "Social Security Administration", "National Institutes of Health",
+                      "Food and Drug Administration", "Small Business Administration"]
   # The user's five target areas. A field fires if ANY of its JEL prefixes or keywords
   # match; it scores `points`, +1 for each additional distinct signal, capped at points+3.
   # The names of the fields that fired go in the sheet's `Fields` column so the sheet can
@@ -82,6 +142,9 @@ scoring:
                  "principal lecturer", "lecturer", "adjunct professor",
                  "teaching load", "course development", "teaching-focused",
                  "instructor of economics"]
+  # Field keywords of 5+ letters normally match anywhere, even mid-word (so "valuation"
+  # also catches "evaluation" -- intended). These only match at the start of a word.
+  word_start_keywords: ["mining"]   # not "determining"/"examining"
   max_field_points: 20        # total cap across all fields
   negative:                   # subtract points
     - {points: -4, patterns: ["macroeconomics", "monetary policy", "asset pricing",

@@ -17,6 +17,7 @@ from joepipe import calendar_sync, joe, sheets
 from joepipe.auth import AuthError, load_credentials, service_account_email
 from joepipe.config import Config
 from joepipe.models import ScoredListing
+from joepipe.score import is_excluded
 from joepipe.score import score as score_listing
 
 RUNS_LOG = Path("data/runs.jsonl")
@@ -40,18 +41,32 @@ class RunResult:
 
 
 def fetch_and_score(cfg: Config) -> list[ScoredListing]:
+    """Scored listings, minus any from scoring.exclude_employers."""
+    scored, _excluded_ids = fetch_score_and_exclude(cfg)
+    return scored
+
+
+def fetch_score_and_exclude(cfg: Config) -> tuple[list[ScoredListing], list[str]]:
+    """(scored non-excluded listings, joe_ids of excluded listings)."""
     listings = joe.fetch_all(cfg.fetch.cache_dir, cfg.fetch.include_previous_issue)
-    return [ScoredListing(listing=lst, score=score_listing(lst, cfg)) for lst in listings]
+    scored: list[ScoredListing] = []
+    excluded_ids: list[str] = []
+    for lst in listings:
+        if is_excluded(lst, cfg):
+            excluded_ids.append(lst.joe_id)
+        else:
+            scored.append(ScoredListing(listing=lst, score=score_listing(lst, cfg)))
+    return scored, excluded_ids
 
 
 def run_pipeline(cfg: Config, dry_run: bool, apply_: bool, i_know_what_im_doing: bool = False) -> RunResult:
     calendar_sync.assert_not_primary(cfg.google.calendar_id, i_know_what_im_doing)
 
-    scored = fetch_and_score(cfg)
+    scored, excluded_ids = fetch_score_and_exclude(cfg)
     kept = [sl for sl in scored if sl.score.total >= cfg.scoring.min_score_to_sheet]
     kept.sort(key=lambda sl: sl.score.total, reverse=True)
 
-    result = RunResult(fetched=len(scored), kept=len(kept), scored_kept=kept)
+    result = RunResult(fetched=len(scored) + len(excluded_ids), kept=len(kept), scored_kept=kept)
 
     if dry_run:
         return result
@@ -115,6 +130,9 @@ def run_pipeline(cfg: Config, dry_run: bool, apply_: bool, i_know_what_im_doing:
             cfg.scoring.min_score_to_calendar,
             today,
         )
+        excluded_deleted = calendar_sync.delete_events_for(service, cfg.google.calendar_id, excluded_ids)
+        sync_counts.deleted += len(excluded_deleted)
+        sync_counts.joe_ids_deleted.extend(excluded_deleted)
         result.events_created = sync_counts.created
         result.events_updated = sync_counts.updated
         result.events_deleted = sync_counts.deleted

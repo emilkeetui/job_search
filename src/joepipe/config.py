@@ -58,12 +58,21 @@ class LocationsConfig(BaseModel):
     penalize: LocationRule
 
 
+class LongTermTemporary(BaseModel):
+    min_months: int = 12
+    sections: dict[str, int] = Field(default_factory=dict)
+
+
 class ScoringConfig(BaseModel):
     min_score_to_sheet: int
     min_score_to_calendar: int
     sections: dict[str, int] = Field(default_factory=dict)
+    long_term_temporary: LongTermTemporary = Field(default_factory=LongTermTemporary)
+    jel_inference: dict[str, list[str]] = Field(default_factory=dict)
     target_employers: TargetEmployers
+    exclude_employers: list[str] = Field(default_factory=list)
     fields: dict[str, FieldConfig] = Field(default_factory=dict)
+    word_start_keywords: list[str] = Field(default_factory=list)
     max_field_points: int
     negative: list[NegativeRule] = Field(default_factory=list)
     locations: LocationsConfig

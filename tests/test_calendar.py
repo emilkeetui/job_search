@@ -183,3 +183,20 @@ def test_purge_deletes_only_joepipe_events(cal_cfg):
     assert deleted == 1
     assert "other1" in service._store
     assert len(service._store) == 1
+
+
+def test_event_matches_ignores_override_order_and_empty_overrides():
+    desired = {
+        "summary": "s", "description": "d",
+        "start": {"date": "2026-11-01"}, "end": {"date": "2026-11-02"},
+        "reminders": {"useDefault": False, "overrides": [
+            {"method": "popup", "minutes": 4320}, {"method": "popup", "minutes": 20160}]},
+    }
+    live = dict(desired, reminders={"useDefault": False, "overrides": [
+        {"method": "popup", "minutes": 20160}, {"method": "popup", "minutes": 4320}]})
+    assert calendar_sync._event_matches(live, desired)
+    default = dict(desired, reminders={"useDefault": True})
+    assert calendar_sync._event_matches(dict(default, reminders={"useDefault": True, "overrides": []}), default)
+    # The API round-trips useDefault=True as useDefault=False on a service-account calendar.
+    assert calendar_sync._event_matches(dict(default, reminders={"useDefault": False}), default)
+    assert not calendar_sync._event_matches(live, default)

@@ -126,13 +126,21 @@ def _find_event(service, calendar_id: str, joe_id: str) -> dict | None:
     return None
 
 
+def _normalize_reminders(reminders: dict | None) -> dict:
+    """The API drops empty override lists and returns overrides in its own order. It also
+    stores useDefault=True as useDefault=False on this calendar (the service account has no
+    default reminders), so "default" and "no overrides" compare equal."""
+    overrides = (reminders or {}).get("overrides") or []
+    return {"overrides": sorted(overrides, key=lambda o: (o.get("minutes", 0), o.get("method", "")))}
+
+
 def _event_matches(existing: dict, desired: dict) -> bool:
     return (
         existing.get("summary") == desired["summary"]
         and existing.get("description") == desired["description"]
         and existing.get("start", {}).get("date") == desired["start"]["date"]
         and existing.get("end", {}).get("date") == desired["end"]["date"]
-        and existing.get("reminders") == desired["reminders"]
+        and _normalize_reminders(existing.get("reminders")) == _normalize_reminders(desired["reminders"])
     )
 
 
@@ -187,11 +195,34 @@ def sync_calendar(
             counts.created += 1
             counts.joe_ids_created.append(joe_id)
         elif not _event_matches(existing, desired):
+            if desired["reminders"].get("useDefault") and existing.get("reminders", {}).get("overrides"):
+                # patch() merges nested objects, so old overrides would survive alongside
+                # useDefault=True (API 400). Clear them in a separate patch first.
+                service.events().patch(
+                    calendarId=calendar_id, eventId=existing["id"],
+                    body={"reminders": {"useDefault": False, "overrides": []}},
+                ).execute()
             service.events().patch(calendarId=calendar_id, eventId=existing["id"], body=desired).execute()
             counts.updated += 1
             counts.joe_ids_updated.append(joe_id)
 
     return counts
+
+
+def delete_events_for(service, calendar_id: str, joe_ids: list[str]) -> list[str]:
+    """Delete the joepipe-stamped event (if any) for each joe_id. Returns joe_ids deleted."""
+    deleted: list[str] = []
+    for joe_id in joe_ids:
+        existing = _find_event(service, calendar_id, joe_id)
+        if existing is None:
+            continue
+        try:
+            service.events().delete(calendarId=calendar_id, eventId=existing["id"]).execute()
+        except HttpError as exc:
+            if exc.resp.status not in (404, 410):
+                raise
+        deleted.append(joe_id)
+    return deleted
 
 
 def list_joepipe_events(service, calendar_id: str) -> list[dict]:
